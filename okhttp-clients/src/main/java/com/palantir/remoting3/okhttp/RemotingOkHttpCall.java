@@ -146,17 +146,17 @@ final class RemotingOkHttpCall extends ForwardingCall {
             public void onFailure(Call call, IOException exception) {
                 // Fail call if backoffs are exhausted or if no retry URL can be determined.
                 Request request = call.request();
-                log.debug("Call failed", SafeArg.of("request", request.toString()));
+                log.debug("Call failed", SafeArg.of("request", request.toString()), exception);
 
                 if (!backoffStrategy.nextBackoff().isPresent()) {
-                    log.error("Ran out of retries", SafeArg.of("request", request));
+                    log.error("Ran out of retries", SafeArg.of("request", request.toString()));
                     callback.onFailure(call, new IOException("Failed to complete the request due to an "
                             + "IOException", exception));
                     return;
                 }
                 Optional<HttpUrl> redirectTo = urls.redirectToNext(request().url());
                 if (!redirectTo.isPresent()) {
-                    log.error("Ran out of URLs to try", SafeArg.of("request", request));
+                    log.error("Ran out of URLs to try", SafeArg.of("request", request.toString()));
                     callback.onFailure(call, new IOException("Failed to determine valid failover URL"
                             + "for '" + request().url() + "' and base URLs " + urls.getBaseUrls()));
                     return;
