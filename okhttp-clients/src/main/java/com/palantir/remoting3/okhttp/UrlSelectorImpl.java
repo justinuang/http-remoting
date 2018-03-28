@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.palantir.logsafe.SafeArg;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -27,8 +28,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import okhttp3.HttpUrl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class UrlSelectorImpl implements UrlSelector {
+
+    private static final Logger log = LoggerFactory.getLogger(UrlSelectorImpl.class);
 
     private final ImmutableList<HttpUrl> baseUrls;
     private final AtomicInteger currentUrl;
@@ -76,6 +81,10 @@ final class UrlSelectorImpl implements UrlSelector {
 
     private Optional<HttpUrl> redirectTo(HttpUrl current, HttpUrl redirectBaseUrl) {
         Optional<Integer> baseUrlIndex = indexFor(redirectBaseUrl);
+        log.debug("In redirectTo",
+                SafeArg.of("current", current),
+                SafeArg.of("baseUrlIndex", baseUrlIndex.toString()),
+                SafeArg.of("redirectBaseUrl", redirectBaseUrl));
         baseUrlIndex.ifPresent(currentUrl::set);
 
         return baseUrlIndex
@@ -84,8 +93,14 @@ final class UrlSelectorImpl implements UrlSelector {
                     if (!isPathPrefixFor(baseUrl, current)) {
                         // The requested redirectBaseUrl has a path that is not compatible with
                         // the path of the current URL
+                        log.warn("pathPrefix not compatible",
+                                SafeArg.of("baseUrl", baseUrl),
+                                SafeArg.of("current", current));
                         return Optional.empty();
                     } else {
+                        log.debug("Returning redirectTo",
+                                SafeArg.of("baseUrl", baseUrl),
+                                SafeArg.of("current", current));
                         return Optional.of(current.newBuilder()
                                 .scheme(baseUrl.scheme())
                                 .host(baseUrl.host())
@@ -102,6 +117,12 @@ final class UrlSelectorImpl implements UrlSelector {
     public Optional<HttpUrl> redirectToNext(HttpUrl existingUrl) {
         // if possible, determine the index of the passed in url (so we can be sure to return a url which is different)
         Optional<Integer> existingUrlIndex = indexFor(existingUrl);
+
+        if (!existingUrlIndex.isPresent()) {
+            log.warn("existingUrlIndex could not be found",
+                    SafeArg.of("existingUrl", existingUrl),
+                    SafeArg.of("currentUrlIndex", currentUrl.get()));
+        }
 
         // ...otherwise we fall back to the stateful current url index
         int index = currentUrl.updateAndGet(
