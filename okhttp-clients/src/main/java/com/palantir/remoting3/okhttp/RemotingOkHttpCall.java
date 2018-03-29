@@ -148,12 +148,15 @@ final class RemotingOkHttpCall extends ForwardingCall {
                 Request request = call.request();
                 log.debug("Call failed", SafeArg.of("request", request.toString()), exception);
 
-                if (!backoffStrategy.nextBackoff().isPresent()) {
+                Optional<Duration> duration = backoffStrategy.nextBackoff();
+                if (!duration.isPresent()) {
                     log.error("Ran out of retries", SafeArg.of("request", request.toString()));
                     callback.onFailure(call, new IOException("Failed to complete the request due to an "
                             + "IOException", exception));
                     return;
                 }
+
+
                 Optional<HttpUrl> redirectTo = urls.redirectToNext(request().url());
                 if (!redirectTo.isPresent()) {
                     log.error("Ran out of URLs to try", SafeArg.of("request", request.toString()));
@@ -171,7 +174,9 @@ final class RemotingOkHttpCall extends ForwardingCall {
                         SafeArg.of("newRequest", redirectedRequest.toString()));
                 RemotingOkHttpCall retryCall =
                         client.newCallWithMutableState(redirectedRequest, backoffStrategy, maxNumRelocations - 1);
-                retryCall.enqueue(callback);
+
+                log.debug("Rescheduling call after backoff", SafeArg.of("backoffMillis", duration.get().toMillis()));
+                scheduleExecution(() -> retryCall.enqueue(callback), duration.get());
             }
 
             @Override
